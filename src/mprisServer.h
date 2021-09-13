@@ -2,7 +2,9 @@
 #define MPRISSERVER_H_
 
 #include <gio/gio.h>
+#ifdef HAVE_GIOUNIX
 #include <gio/gdesktopappinfo.h>
+#endif
 
 #define DDB_API_LEVEL 9
 #define DDB_WARN_DEPRECATED 1

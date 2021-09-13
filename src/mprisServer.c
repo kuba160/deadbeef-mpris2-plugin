@@ -87,6 +87,10 @@ static GMainLoop *loop;
 
 static gboolean bytecodeCompiled;
 
+#ifndef HAVE_GIOUNIX
+extern DB_plugin_action_t *action_show_mainwin;
+#endif
+
 static GVariant* produceScalarString(const char *valueStr) {
 	return g_variant_new_string(valueStr);
 }
@@ -347,6 +351,7 @@ static void onRootMethodCallHandler(GDBusConnection *connection, const char *sen
 		g_dbus_method_invocation_return_value(invocation, NULL);
 		deadbeef->sendmessage(DB_EV_TERMINATE, 0, 0, 0);
 	} else if (strcmp(methodName, "Raise") == 0) {
+#ifdef HAVE_GIOUNIX
 		GDesktopAppInfo *dskapp = g_desktop_app_info_new ("deadbeef.desktop");
 		if (dskapp) {
 			g_app_info_launch ((GAppInfo *) dskapp, NULL, NULL, NULL);
@@ -355,6 +360,11 @@ static void onRootMethodCallHandler(GDBusConnection *connection, const char *sen
 			deadbeef->sendmessage (DB_EV_ACTIVATED, 0, 0, 0);
 		}
 		g_dbus_method_invocation_return_value(invocation, NULL);
+#else
+		if (action_show_mainwin) {
+			action_show_mainwin->callback2(NULL,0);
+		}
+#endif
 	} else {
 		debug("Error! Unsupported method. %s.%s", interfaceName, methodName);
 		g_dbus_method_invocation_return_error(invocation, G_DBUS_ERROR, G_DBUS_ERROR_NOT_SUPPORTED,

@@ -9,6 +9,10 @@ static struct MprisData mprisData;
 static int oldLoopStatus = -1;
 static int oldShuffleStatus = -1;
 
+#ifndef HAVE_GIOUNIX
+DB_plugin_action_t *action_show_mainwin = NULL;
+#endif
+
 static int onStart() {
 	oldLoopStatus = mprisData.deadbeef->conf_get_int("playback.loop", 0);
 	oldShuffleStatus = mprisData.deadbeef->conf_get_int("playback.order", PLAYBACK_ORDER_LINEAR);
@@ -68,6 +72,25 @@ static int onConnect() {
 	} else {
 		debug("hotkeys plugin not detected... previous or restart support disabled");
 	}
+
+#ifndef HAVE_GIOUNIX
+	// get action_show_mainwin, GUI plugin should be first on list but it is not guaranteed.
+	int i = -1;
+	DB_plugin_t **list = mprisData.deadbeef->plug_get_list();
+	while (list[i+1] && list[++i]->type == DB_PLUGIN_GUI) {
+		DB_plugin_action_t* action = list[i]->get_actions(NULL);
+		while (action) {
+			if (strcmp(action->name, "show_player_window") == 0) {
+				action_show_mainwin = action;
+				break;
+			}
+			action = action->next;
+		}
+		if (action_show_mainwin) {
+			break;
+		}
+	}
+#endif
 
 	return 0;
 }
