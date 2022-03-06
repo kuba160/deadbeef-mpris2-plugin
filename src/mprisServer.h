@@ -15,12 +15,20 @@
 #define PREVIOUS_ACTION_PREVIOUS 0
 #define PREVIOUS_ACTION_PREV_OR_RESTART 1
 
+struct ArtworkData {
+	uintptr_t mutex;
+	DB_playItem_t *track;
+	char *path;
+	char *default_path;
+};
+
 struct MprisData {
 	DB_functions_t *deadbeef;
-	DB_artwork_plugin_t *artwork;
+	ddb_artwork_plugin_t *artwork;
 	DB_plugin_action_t *prevOrRestart;
 	GDBusNodeInfo *gdbusNodeInfo;
 	int previousAction;
+	struct ArtworkData artworkData;
 };
 
 void* startServer(void*);

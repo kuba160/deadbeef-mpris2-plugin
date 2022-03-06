@@ -35,6 +35,12 @@ static int onStop() {
 	g_thread_unref(mprisThread);
 #endif
 
+	if (mprisData.artwork) {
+		free(mprisData.artworkData.path);
+		free(mprisData.artworkData.default_path);
+		mprisData.deadbeef->mutex_free(mprisData.artworkData.mutex);
+	}
+
 	return 0;
 }
 
@@ -42,11 +48,15 @@ static int onConnect() {
 	mprisData.artwork = NULL;
 	mprisData.prevOrRestart = NULL;
 
-	DB_artwork_plugin_t *artworkPlugin = (DB_artwork_plugin_t *)mprisData.deadbeef->plug_get_for_id ("artwork");
+	ddb_artwork_plugin_t *artworkPlugin = (ddb_artwork_plugin_t *)mprisData.deadbeef->plug_get_for_id ("artwork2");
 
 	if (artworkPlugin != NULL) {
 		debug("artwork plugin detected... album art support enabled");
 		mprisData.artwork = artworkPlugin;
+		mprisData.artworkData.mutex = mprisData.deadbeef->mutex_create_nonrecursive();
+		mprisData.artworkData.track = NULL;
+		mprisData.artworkData.path = NULL;
+		mprisData.artworkData.default_path = NULL;
 	} else {
 		debug("artwork plugin not detected... album art support disabled");
 	}

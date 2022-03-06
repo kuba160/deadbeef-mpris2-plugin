@@ -168,11 +168,27 @@ static void freeTfBytecode(DB_functions_t *deadbeef) {
 	}
 }
 
-static void coverartCallback(const char *fname, const char *artist, const char *album, void *userData) {
-	if (fname != NULL) { // cover was not ready
-		debug("Async loaded cover for %s", album);
-		emitMetadataChanged(-1, userData);
+static void coverartCallback(int error, ddb_cover_query_t *query, ddb_cover_info_t *cover) {
+	struct MprisData *mprisData = (struct MprisData*) query->user_data;
+	char * cover_path = NULL;
+	if (cover) {
+		if (cover->cover_found) {
+			cover_path = malloc(strlen(cover->image_filename) + strlen("file://") + 1);
+			strcpy(cover_path,"file://");
+			strcpy(cover_path + strlen("file://"), cover->image_filename);
+			debug("Async loaded cover for %x, (path: %s)", query->track, cover->image_filename);
+		}
+		mprisData->artwork->cover_info_release(cover);
 	}
+	// Replace cover
+	mprisData->deadbeef->mutex_lock(mprisData->artworkData.mutex);
+	mprisData->artworkData.track = query->track;
+	free(mprisData->artworkData.path);
+	mprisData->artworkData.path = cover_path;
+	mprisData->deadbeef->mutex_unlock(mprisData->artworkData.mutex);
+
+	free(query);
+	emitMetadataChanged(-1, mprisData);
 }
 
 GVariant* getMetadataForTrack(int track_id, struct MprisData *mprisData) {
@@ -214,34 +230,39 @@ GVariant* getMetadataForTrack(int track_id, struct MprisData *mprisData) {
 		}
 
 		if (mprisData->artwork != NULL) {
-			char *artworkPath = NULL;
 			char *albumArtUri = NULL;
 
-			debug("getting cover for album %s", album);
-			artworkPath = mprisData->artwork->get_album_art(uri, artist, album, -1, coverartCallback, mprisData);
-			if (artworkPath == NULL) {
-				debug("cover for %s not ready. Using default artwork", album);
-				const char *defaultPath = mprisData->artwork->get_default_cover();
-				if (defaultPath != NULL) {
-					albumArtUri = malloc(strlen(defaultPath) + 7 + 1); // strlen(defaultPath) + strlen("file://") + "/0"
-
-					strcpy(albumArtUri, "file://");
-					strcpy(albumArtUri + 7, defaultPath);
+			mprisData->deadbeef->mutex_lock(mprisData->artworkData.mutex);
+			if (mprisData->artworkData.track == track) {
+				if (mprisData->artworkData.path) {
+					debug("cover for %s ready. Artwork is: %s", album, mprisData->artworkData.path);
+					albumArtUri = mprisData->artworkData.path;
 				}
-			} else {
-				debug("cover for %s ready. Artwork is: %s", album, artworkPath);
-				albumArtUri = malloc(strlen(artworkPath) + 7 + 1); // strlen(artworkPath) + strlen("file://") + "/0"
-
-				strcpy(albumArtUri, "file://");
-				strcpy(albumArtUri + 7, artworkPath);
-
-				free(artworkPath);
+				else {
+					if (!mprisData->artworkData.default_path) {
+						mprisData->artworkData.default_path = malloc(512);
+						strcpy(mprisData->artworkData.default_path,"file://");
+						mprisData->artwork->default_image_path(mprisData->artworkData.default_path + strlen("file://"), 512 - strlen("file://"));
+					}
+					debug("Cover not found, using default (path: %s)", mprisData->artworkData.default_path);
+					albumArtUri = mprisData->artworkData.default_path;
+				}
+			}
+			else {
+				debug("getting cover for album %s", album);
+				ddb_cover_query_t *artworkQuery = calloc(sizeof(ddb_cover_query_t),1);
+				if (artworkQuery) {
+					artworkQuery->_size = sizeof(ddb_cover_query_t);
+					artworkQuery->track = track;
+					artworkQuery->user_data = mprisData;
+					mprisData->artwork->cover_get(artworkQuery, coverartCallback);
+				}
 			}
 
 			if (albumArtUri != NULL) {
 				g_variant_builder_add(builder, "{sv}", "mpris:artUrl", g_variant_new("s", albumArtUri));
-				free(albumArtUri);
 			}
+			mprisData->deadbeef->mutex_unlock(mprisData->artworkData.mutex);
 		}
 
 		// init on first access
